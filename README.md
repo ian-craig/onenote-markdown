@@ -13,6 +13,7 @@ A command-line utility that converts OneNote notebooks to Markdown format, prese
 - 🔍 Supports pagination for large notebooks
 - 🔁 Automatic retry for failed requests
 - 📝 Detailed progress logging
+- 📁 Organizes output by section with separate image directories
 
 ## Prerequisites
 
@@ -70,9 +71,14 @@ A command-line utility that converts OneNote notebooks to Markdown format, prese
 
 ## Usage
 
-Basic usage:
+Basic usage (download a specific section):
 ```bash
 uv run onenote_markdown.py download --notebook "My Notebook" --section "My Section" --output-dir ./output --client-id "your-client-id-here"
+```
+
+Download all sections in a notebook:
+```bash
+uv run onenote_markdown.py download --notebook "My Notebook" --output-dir ./output --client-id "your-client-id-here"
 ```
 
 ### Command Line Arguments
@@ -80,7 +86,7 @@ uv run onenote_markdown.py download --notebook "My Notebook" --section "My Secti
 | Argument | Required | Description |
 |----------|----------|-------------|
 | `--notebook` | Yes | Name of the OneNote notebook to download |
-| `--section` | Yes | Name of the section containing the pages |
+| `--section` | No | Name of the section to download (if not specified, downloads all sections) |
 | `--output-dir` | No | Directory where Markdown files will be saved (default: `./output`) |
 | `--client-id` | Yes | Microsoft Graph API client ID from your registered application |
 
@@ -95,16 +101,33 @@ uv run onenote_markdown.py download --notebook "My Notebook" --section "My Secti
 
 ### Output Structure
 
-The script creates the following structure in your output directory:
+The script creates a directory structure based on your notebook sections:
+
 ```
 output/
-├── images/           # All images from the notebook
-├── Page1.md         # Top-level pages
-├── PageWithChildren.md
-└── PageWithChildren/
-    ├── Child1.md    # Child pages
-    └── Child2.md
+├── Section1/              # Each section gets its own directory
+│   ├── images/           # Section-specific images
+│   ├── Page1.md         # Top-level pages
+│   ├── PageWithChildren.md
+│   └── PageWithChildren/
+│       ├── Child1.md    # Child pages
+│       └── Child2.md
+│
+├── Section2/              # Another section
+│   ├── images/           # Separate images directory
+│   ├── Page1.md
+│   └── ...
+│
+└── Section3/              # And so on...
+    ├── images/
+    └── ...
 ```
+
+Each section directory contains:
+- A separate `images` directory for that section's images
+- Markdown files for all pages in that section
+- Subdirectories for pages with children
+- Proper relative paths for images and links
 
 ## Troubleshooting
 
@@ -118,10 +141,12 @@ output/
 2. **Notebook/Section Not Found**
    - Verify the notebook and section names exactly match your OneNote
    - Names are case-sensitive
+   - If downloading all sections, ensure the notebook exists
 
 3. **Image Download Issues**
    - Check your internet connection
    - Verify you have write permissions in the output directory
+   - Each section has its own images directory
 
 ### Getting Help
 

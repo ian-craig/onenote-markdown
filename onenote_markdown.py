@@ -278,15 +278,18 @@ class OneNoteToMarkdown:
         
     def sanitize_filename(self, filename: str) -> str:
         """Convert a string to a valid filename by removing all special characters."""
+        # First replace slashes with hyphens
+        filename = filename.replace('/', '-').replace('\\', '-')
+        
         # Replace any non-alphanumeric characters (except hyphens and underscores) with underscores
         # This includes spaces, dots (except for the last one which is the extension), and any other special chars
         filename = re.sub(r'[^a-zA-Z0-9\-_]', '_', filename)
         
-        # Remove multiple consecutive underscores
-        filename = re.sub(r'_+', '_', filename)
+        # Remove multiple consecutive underscores or hyphens
+        filename = re.sub(r'[_\-]+', '-', filename)
         
-        # Remove leading/trailing underscores
-        filename = filename.strip('_')
+        # Remove leading/trailing underscores and hyphens
+        filename = filename.strip('_-')
         
         # Convert to lowercase for consistency
         filename = filename.lower()
@@ -438,7 +441,7 @@ class OneNoteToMarkdown:
                 markdown_path = output_path / f"{page_title}.md"
             is_child_page = False
         
-        # Use a single root-level images directory for all pages
+        # Use a single root-level images directory for all pages in this section
         images_dir = output_path / "images"
         images_dir.mkdir(exist_ok=True)
         
@@ -469,13 +472,11 @@ class OneNoteToMarkdown:
             click.echo(f"{'  ' * level}• {page['title']}")
             self.print_page_hierarchy(page.get('children', []), level + 1)
 
-    def download_and_convert(self, notebook_name: str, section_name: str, output_dir: str):
-        """Download pages from a section and convert them to Markdown and HTML."""
-        # Create output directory and images subdirectory
-        output_path = Path(output_dir)
-        output_path.mkdir(parents=True, exist_ok=True)
-        images_dir = output_path / "images"
-        images_dir.mkdir(exist_ok=True)
+    def download_and_convert(self, notebook_name: str, section_name: Optional[str], output_dir: str):
+        """Download pages from a section or all sections and convert them to Markdown."""
+        # Create base output directory
+        base_output_path = Path(output_dir)
+        base_output_path.mkdir(parents=True, exist_ok=True)
         
         click.echo(f"\nLooking for notebook '{notebook_name}'...")
         # Find notebook
@@ -485,35 +486,57 @@ class OneNoteToMarkdown:
             raise Exception(f"Notebook '{notebook_name}' not found")
         click.echo(f"Found notebook: {notebook_name}")
         
-        click.echo(f"\nLooking for section '{section_name}'...")
-        # Find section
+        # Get all sections
         sections = self.client.get_sections(notebook["id"])
-        section = next((s for s in sections if s["displayName"] == section_name), None)
-        if not section:
-            raise Exception(f"Section '{section_name}' not found in notebook '{notebook_name}'")
-        click.echo(f"Found section: {section_name}")
+        if not sections:
+            raise Exception(f"No sections found in notebook '{notebook_name}'")
+            
+        # Filter sections if section_name is provided
+        if section_name:
+            sections = [s for s in sections if s["displayName"] == section_name]
+            if not sections:
+                raise Exception(f"Section '{section_name}' not found in notebook '{notebook_name}'")
+            click.echo(f"\nDownloading section: {section_name}")
+        else:
+            click.echo(f"\nDownloading all sections ({len(sections)} sections found):")
+            for section in sections:
+                click.echo(f"  • {section['displayName']}")
         
-        click.echo("\nStarting page download and conversion...")
-        # Get and convert pages (including nested pages)
-        pages = self.client.get_pages(section["id"])
+        # Process each section
+        for section in sections:
+            section_name = section["displayName"]
+            click.echo(f"\nProcessing section: {section_name}")
+            
+            # Create section-specific output directory
+            section_output_path = base_output_path / section_name
+            section_output_path.mkdir(exist_ok=True)
+            
+            # Create section-specific images directory
+            images_dir = section_output_path / "images"
+            images_dir.mkdir(exist_ok=True)
+            
+            click.echo("\nStarting page download and conversion...")
+            # Get and convert pages (including nested pages)
+            pages = self.client.get_pages(section["id"])
+            
+            def count_pages(page):
+                count = 1  # Count the current page
+                for child in page.get('children', []):
+                    count += count_pages(child)
+                return count
+            
+            total_pages = sum(count_pages(page) for page in pages)
+            
+            click.echo("\nPage hierarchy:")
+            self.print_page_hierarchy(pages)
+            click.echo(f"\nConverting {total_pages} pages to Markdown...")
+            
+            for page in pages:
+                self.process_page(page, section_output_path)
+            
+            click.echo(f"\nCompleted conversion for section: {section_name}")
         
-        # Count total pages for progress reporting
-        def count_pages(page):
-            count = 1  # Count the current page
-            for child in page.get('children', []):
-                count += count_pages(child)
-            return count
-        
-        total_pages = sum(count_pages(page) for page in pages)
-        
-        click.echo("\nPage hierarchy:")
-        self.print_page_hierarchy(pages)
-        click.echo(f"\nConverting {total_pages} pages to Markdown...")
-        
-        for page in pages:
-            self.process_page(page, output_path)
-        
-        click.echo("\nConversion completed successfully!")
+        click.echo("\nAll conversions completed successfully!")
 
 @click.group()
 def cli():
@@ -522,10 +545,10 @@ def cli():
 
 @cli.command()
 @click.option('--notebook', required=True, help='Name of the OneNote notebook')
-@click.option('--section', required=True, help='Name of the section to download')
+@click.option('--section', help='Name of the section to download (if not specified, downloads all sections)')
 @click.option('--output-dir', default='./output', help='Output directory for Markdown files')
 @click.option('--client-id', required=True, help='Microsoft Graph API client ID')
-def download(notebook: str, section: str, output_dir: str, client_id: str):
+def download(notebook: str, section: Optional[str], output_dir: str, client_id: str):
     """Download and convert OneNote pages to Markdown format."""
     try:
         # Initialize the client with the provided client ID
