@@ -345,10 +345,35 @@ class OneNoteToMarkdown:
             click.echo(f"Warning: Failed to download image {image_url}: {str(e)}", err=True)
             return None
     
+    def _clean_machine_generated_alt_text(self, soup: BeautifulSoup) -> None:
+        """Remove machine-generated alt text from images."""
+        for img in soup.find_all('img'):
+            if img.get('alt', '').startswith('Machine generated alternative text:'):
+                img['alt'] = ''
+
+    def _convert_bold_spans(self, soup: BeautifulSoup) -> None:
+        """Wrap contents of spans with font-weight:bold in b elements."""
+        for span in soup.find_all('span'):
+            style = span.get('style', '')
+            if 'font-weight:bold' in style or 'font-weight: 700' in style:
+                # Create a new b element
+                b = soup.new_tag('b')
+                # Move all contents of the span to the b element
+                b.extend(span.contents)
+                # Clear the span and append the b element
+                span.clear()
+                span.append(b)
+
     def convert_page_to_markdown(self, html_content: str, images_dir: Path, page_title: str, is_child_page: bool = False) -> str:
         """Convert OneNote HTML content to Markdown and download images."""
         # Parse HTML
         soup = BeautifulSoup(html_content, 'html.parser')
+        
+        # Clean up machine-generated alt text
+        self._clean_machine_generated_alt_text(soup)
+        
+        # Convert bold spans to b elements
+        self._convert_bold_spans(soup)
         
         # Handle OneNote-specific elements and download images
         for img in soup.find_all('img'):
@@ -417,6 +442,7 @@ class OneNoteToMarkdown:
     def process_page(self, page: Dict, output_path: Path, parent_dir: Path = None) -> None:
         """Process a single page and its children recursively."""
         page_title = page["title"]
+        sanitized_title = self.sanitize_filename(page_title)
         has_children = bool(page.get('children', []))
         
         # Determine the directory for this page and its files
@@ -426,19 +452,19 @@ class OneNoteToMarkdown:
             # Ensure parent directory exists
             page_dir.mkdir(exist_ok=True)
             # Save files in the parent's directory
-            markdown_path = page_dir / f"{page_title}.md"
+            markdown_path = page_dir / f"{sanitized_title}.md"
             is_child_page = True
         else:
             # This is a top-level page
             if has_children:
                 # Only create a directory if the page has children
-                page_dir = output_path / page_title
+                page_dir = output_path / sanitized_title
                 page_dir.mkdir(exist_ok=True)
-                markdown_path = output_path / f"{page_title}.md"
+                markdown_path = output_path / f"{sanitized_title}.md"
             else:
                 # No children, save directly in output directory
                 page_dir = output_path
-                markdown_path = output_path / f"{page_title}.md"
+                markdown_path = output_path / f"{sanitized_title}.md"
             is_child_page = False
         
         # Use a single root-level images directory for all pages in this section
@@ -450,6 +476,8 @@ class OneNoteToMarkdown:
         
         # Get page content
         html_content = self.client.get_page_content(page["id"])
+        
+        # Convert to Markdown
         markdown_content = self.convert_page_to_markdown(html_content, images_dir, page_title, is_child_page)
         
         # Ensure the directory exists before writing the file
