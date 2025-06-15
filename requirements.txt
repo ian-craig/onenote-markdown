@@ -1,0 +1,7 @@
+msal>=1.25.0
+msgraph-core>=0.2.2
+click>=8.1.7
+python-dotenv>=1.0.0
+requests>=2.31.0
+beautifulsoup4>=4.12.2
+html2text>=2020.1.16 
