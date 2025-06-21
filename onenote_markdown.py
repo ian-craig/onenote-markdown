@@ -19,6 +19,7 @@ import threading
 import urllib.parse
 import hashlib
 from urllib.parse import urlparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Port for the local redirect server
 REDIRECT_PORT = 8400
@@ -277,34 +278,69 @@ class OneNoteToMarkdown:
         self.image_counter = 0  # For generating unique image filenames
         
     def sanitize_filename(self, filename: str) -> str:
-        """Convert a string to a valid filename by removing all special characters."""
-        # First replace slashes with hyphens
+        """Sanitize filename to be safe for filesystem while preserving readability."""
+        if not filename:
+            return 'untitled'
+        
+        # Replace slashes with dashes
         filename = filename.replace('/', '-').replace('\\', '-')
         
-        # Replace any non-alphanumeric characters (except hyphens and underscores) with underscores
-        # This includes spaces, dots (except for the last one which is the extension), and any other special chars
-        filename = re.sub(r'[^a-zA-Z0-9\-_]', '_', filename)
+        # Remove or replace unsafe characters for filesystems
+        # Keep: letters, numbers, spaces, hyphens, underscores, dots, parentheses, brackets
+        # Remove: control characters, and other potentially problematic chars
+        import re
+        # Remove control characters and other unsafe characters
+        filename = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', filename)
         
-        # Remove multiple consecutive underscores or hyphens
-        filename = re.sub(r'[_\-]+', '-', filename)
+        # Replace multiple consecutive dashes or spaces with single ones
+        filename = re.sub(r'-+', '-', filename)
+        filename = re.sub(r' +', ' ', filename)
         
-        # Remove leading/trailing underscores and hyphens
-        filename = filename.strip('_-')
+        # Trim leading and trailing spaces, dashes, and dots
+        filename = filename.strip(' .-')
         
-        # Convert to lowercase for consistency
+        # Ensure the filename is not empty after sanitization
+        if not filename:
+            return 'untitled'
+        
+        return filename
+
+    def sanitize_image_filename(self, filename: str) -> str:
+        """Sanitize image filename to be safe for filesystem with lowercase and dashes."""
+        if not filename:
+            return 'untitled'
+        
+        # Replace slashes with dashes
+        filename = filename.replace('/', '-').replace('\\', '-')
+        
+        # Convert to lowercase
         filename = filename.lower()
         
-        # Ensure the filename isn't empty after sanitization
+        # Replace spaces and special characters with dashes
+        import re
+        # Replace spaces and special characters with dashes
+        filename = re.sub(r'[^a-z0-9.-]', '-', filename)
+        
+        # Remove control characters
+        filename = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', filename)
+        
+        # Replace multiple consecutive dashes with single ones
+        filename = re.sub(r'-+', '-', filename)
+        
+        # Trim leading and trailing dashes and dots
+        filename = filename.strip('.-')
+        
+        # Ensure the filename is not empty after sanitization
         if not filename:
-            filename = 'untitled'
-            
+            return 'untitled'
+        
         return filename
-    
+
     def download_image(self, image_url: str, images_dir: Path, page_title: str, headers: Optional[Dict[str, str]] = None) -> Optional[str]:
         """Download an image and return its local path relative to the markdown file."""
         try:
             # Generate a unique filename using page name, URL hash and counter
-            page_name = self.sanitize_filename(page_title)
+            page_name = self.sanitize_image_filename(page_title)
             url_hash = hashlib.md5(image_url.encode()).hexdigest()[:8]
             self.image_counter += 1
             
@@ -440,7 +476,7 @@ class OneNoteToMarkdown:
         return '\n'.join(cleaned)
     
     def process_page(self, page: Dict, output_path: Path, parent_dir: Path = None) -> None:
-        """Process a single page and its children recursively."""
+        """Process a single page."""
         page_title = page["title"]
         sanitized_title = self.sanitize_filename(page_title)
         has_children = bool(page.get('children', []))
@@ -489,10 +525,6 @@ class OneNoteToMarkdown:
             f.write(markdown_content)
         
         click.echo(f"Converted: {page_title} -> {markdown_path}")
-        
-        # Process child pages in the parent's directory
-        for child_page in page.get('children', []):
-            self.process_page(child_page, output_path, page_dir)
     
     def print_page_hierarchy(self, pages: List[Dict], level: int = 0) -> None:
         """Print the page hierarchy in a tree-like structure."""
@@ -559,8 +591,51 @@ class OneNoteToMarkdown:
             self.print_page_hierarchy(pages)
             click.echo(f"\nConverting {total_pages} pages to Markdown...")
             
+            # Collect all pages (including children) for parallel processing
+            all_pages = []
+            
+            def collect_pages(page, parent_dir=None):
+                all_pages.append((page, parent_dir))
+                # For children, pass the parent's directory path
+                if parent_dir is None:
+                    # Top-level page - children will be in the page's directory
+                    page_dir = section_output_path / self.sanitize_filename(page["title"])
+                else:
+                    # Child page - children will be in the parent's directory
+                    page_dir = parent_dir
+                
+                for child in page.get('children', []):
+                    collect_pages(child, page_dir)
+            
             for page in pages:
-                self.process_page(page, section_output_path)
+                collect_pages(page)
+            
+            # Process all pages in parallel
+            failed_pages = []
+            
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                futures = []
+                for page, parent_dir in all_pages:
+                    future = executor.submit(self.process_page, page, section_output_path, parent_dir)
+                    futures.append((future, page))
+                
+                # Wait for all pages to complete
+                for future, page in futures:
+                    try:
+                        future.result()
+                    except Exception as e:
+                        error_msg = str(e)
+                        click.echo(f"Error processing page '{page['title']}': {error_msg}", err=True)
+                        failed_pages.append((page['title'], error_msg))
+                        # Continue processing other pages even if one fails
+            
+            # Display summary of failed pages
+            if failed_pages:
+                click.echo(f"\n❌ Failed to process {len(failed_pages)} pages in section '{section_name}':")
+                for page_title, error in failed_pages:
+                    click.echo(f"  • {page_title}: {error}")
+            else:
+                click.echo(f"\n✅ Successfully processed all {total_pages} pages in section '{section_name}'")
             
             click.echo(f"\nCompleted conversion for section: {section_name}")
         

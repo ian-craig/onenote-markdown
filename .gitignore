@@ -11,3 +11,6 @@ wheels/
 
 # Default output directory
 output/
+output_*/
+
+.DS_Store
