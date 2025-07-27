@@ -486,7 +486,7 @@ class OneNoteToMarkdown:
             # This is a child page, save directly in parent's directory
             page_dir = parent_dir
             # Ensure parent directory exists
-            page_dir.mkdir(exist_ok=True)
+            page_dir.mkdir(parents=True, exist_ok=True)
             # Save files in the parent's directory
             markdown_path = page_dir / f"{sanitized_title}.md"
             is_child_page = True
@@ -495,7 +495,7 @@ class OneNoteToMarkdown:
             if has_children:
                 # Only create a directory if the page has children
                 page_dir = output_path / sanitized_title
-                page_dir.mkdir(exist_ok=True)
+                page_dir.mkdir(parents=True, exist_ok=True)
                 markdown_path = output_path / f"{sanitized_title}.md"
             else:
                 # No children, save directly in output directory
@@ -505,7 +505,7 @@ class OneNoteToMarkdown:
         
         # Use a single root-level images directory for all pages in this section
         images_dir = output_path / "images"
-        images_dir.mkdir(exist_ok=True)
+        images_dir.mkdir(parents=True, exist_ok=True)
         
         # Reset image counter for this page
         self.image_counter = 0
@@ -517,7 +517,7 @@ class OneNoteToMarkdown:
         markdown_content = self.convert_page_to_markdown(html_content, images_dir, page_title, is_child_page)
         
         # Ensure the directory exists before writing the file
-        markdown_path.parent.mkdir(exist_ok=True)
+        markdown_path.parent.mkdir(parents=True, exist_ok=True)
         
         # Save markdown file
         with open(markdown_path, 'w', encoding='utf-8') as f:
@@ -569,11 +569,11 @@ class OneNoteToMarkdown:
             
             # Create section-specific output directory
             section_output_path = base_output_path / section_name
-            section_output_path.mkdir(exist_ok=True)
+            section_output_path.mkdir(parents=True, exist_ok=True)
             
             # Create section-specific images directory
             images_dir = section_output_path / "images"
-            images_dir.mkdir(exist_ok=True)
+            images_dir.mkdir(parents=True, exist_ok=True)
             
             click.echo("\nStarting page download and conversion...")
             # Get and convert pages (including nested pages)
