@@ -19,7 +19,6 @@ A command-line utility that converts OneNote notebooks to Markdown format, prese
 
 - Python 3.11 or higher
 - A Microsoft personal account with OneNote notebooks
-- A registered application in the Microsoft identity platform
 
 ## Installation
 
@@ -45,41 +44,19 @@ A command-line utility that converts OneNote notebooks to Markdown format, prese
    pip install -r requirements.txt
    ```
 
-## Microsoft Graph API Setup
-
-1. Register a new application:
-   - Visit [Azure Portal - App Registrations](https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade)
-   - Click "New registration"
-   - Name: "OneNote Markdown Converter"
-   - Supported account types: "Personal Microsoft accounts only"
-   - Click "Register"
-   - Copy the Application (client) ID
-
-2. Configure the application:
-   - In your registered app, go to "Authentication"
-   - Under "Platform configurations", click "Add a platform"
-   - Choose "Mobile and desktop applications"
-   - Add the redirect URI: `http://localhost:8400`
-   - Under "Default client type", check "Treat application as a public client"
-   - Click "Configure"
-   - Go to "API permissions"
-   - Click "Add a permission"
-   - Choose "Microsoft Graph"
-   - Select "Delegated permissions"
-   - Search for and add "Notes.Read"
-   - Click "Grant admin consent" (if available)
-
 ## Usage
 
-Basic usage (download a specific section):
+Download a specific section:
 ```bash
-uv run onenote_markdown.py download --notebook "My Notebook" --section "My Section" --output-dir ./output --client-id "your-client-id-here"
+uv run onenote_markdown.py download --notebook "My Notebook" --section "My Section" --output-dir ./output
 ```
 
 Download all sections in a notebook:
 ```bash
-uv run onenote_markdown.py download --notebook "My Notebook" --output-dir ./output --client-id "your-client-id-here"
+uv run onenote_markdown.py download --notebook "My Notebook" --output-dir ./output
 ```
+
+The application uses a pre-configured Microsoft Graph API application by default - no additional setup required!
 
 ### Command Line Arguments
 
@@ -88,7 +65,7 @@ uv run onenote_markdown.py download --notebook "My Notebook" --output-dir ./outp
 | `--notebook` | Yes | Name of the OneNote notebook to download |
 | `--section` | No | Name of the section to download (if not specified, downloads all sections) |
 | `--output-dir` | No | Directory where Markdown files will be saved (default: `./output`) |
-| `--client-id` | Yes | Microsoft Graph API client ID from your registered application |
+| `--client-id` | No | Microsoft Graph API client ID (uses default shared application if not specified) |
 
 ### Authentication Flow
 
@@ -128,6 +105,37 @@ Each section directory contains:
 - Markdown files for all pages in that section
 - Subdirectories for pages with children
 - Proper relative paths for images and links
+
+## Advanced: Using Your Own Microsoft Graph Application
+
+For additional security or customization, you can create your own Microsoft Graph application:
+
+1. Register a new application:
+   - Visit [Azure Portal - App Registrations](https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade)
+   - Click "New registration"
+   - Name: "OneNote Markdown Converter"
+   - Supported account types: "Personal Microsoft accounts only"
+   - Click "Register"
+   - Copy the Application (client) ID
+
+2. Configure the application:
+   - In your registered app, go to "Authentication"
+   - Under "Platform configurations", click "Add a platform"
+   - Choose "Mobile and desktop applications"
+   - Add the redirect URI: `http://localhost:8400`
+   - Under "Default client type", check "Treat application as a public client"
+   - Click "Configure"
+   - Go to "API permissions"
+   - Click "Add a permission"
+   - Choose "Microsoft Graph"
+   - Select "Delegated permissions"
+   - Search for and add "Notes.Read"
+   - Click "Grant admin consent" (if available)
+
+3. Use your custom application:
+   ```bash
+   uv run onenote_markdown.py download --notebook "My Notebook" --client-id "your-client-id-here"
+   ```
 
 ## Troubleshooting
 

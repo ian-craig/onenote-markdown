@@ -650,7 +650,7 @@ def cli():
 @click.option('--notebook', required=True, help='Name of the OneNote notebook')
 @click.option('--section', help='Name of the section to download (if not specified, downloads all sections)')
 @click.option('--output-dir', default='./output', help='Output directory for Markdown files')
-@click.option('--client-id', required=True, help='Microsoft Graph API client ID')
+@click.option('--client-id', default='8e1a6f85-d243-41ac-a6d3-4b7fd05ce004', help='Microsoft Graph API client ID (defaults to shared application)')
 def download(notebook: str, section: Optional[str], output_dir: str, client_id: str):
     """Download and convert OneNote pages to Markdown format."""
     try:
